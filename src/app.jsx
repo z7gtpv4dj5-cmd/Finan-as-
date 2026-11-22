@@ -16,7 +16,7 @@ function __factory(React, RN, AsyncStorage) {
   var Modal = RN.Modal, KeyboardAvoidingView = RN.KeyboardAvoidingView, Platform = RN.Platform, Share = RN.Share;
   var StatusBar = RN.StatusBar;
 
-  var VERSION = '2.0 (22/11/2026)';
+  var VERSION = '2.1 (22/11/2026)';
   var STORAGE_KEY = '@meu_dinheiro_v2';
   var OLD_KEY = '@meu_dinheiro_v1';
 
@@ -30,6 +30,7 @@ function __factory(React, RN, AsyncStorage) {
   // ---------- Categorias ----------
   var DIA_CATS = [
     { id: 'lanche', label: 'Lanche', icon: '🍔' },
+    { id: 'restaurante', label: 'Restaurante', icon: '🍽️' },
     { id: 'delivery', label: 'Delivery', icon: '🛵' },
     { id: 'cafe', label: 'Café', icon: '☕' },
     { id: 'doces', label: 'Doces', icon: '🍫' },
@@ -39,7 +40,11 @@ function __factory(React, RN, AsyncStorage) {
     { id: 'lazer', label: 'Lazer', icon: '🎉' },
     { id: 'combustivel', label: 'Combustível', icon: '⛽' },
     { id: 'uber', label: 'Uber/Ônibus', icon: '🚕' },
+    { id: 'estacionamento', label: 'Estacionar', icon: '🅿️' },
     { id: 'farmacia', label: 'Farmácia', icon: '💊' },
+    { id: 'streaming', label: 'Streaming', icon: '📺' },
+    { id: 'beleza', label: 'Beleza', icon: '💇' },
+    { id: 'pet', label: 'Pet', icon: '🐶' },
     { id: 'roupas', label: 'Roupas', icon: '👕' },
     { id: 'presentes', label: 'Presentes', icon: '🎁' },
     { id: 'outros', label: 'Outros', icon: '📦' },
@@ -49,8 +54,24 @@ function __factory(React, RN, AsyncStorage) {
     { id: 'grande', label: 'Compra grande', icon: '🛋️' },
     { id: 'extra', label: 'Receita extra', icon: '💰' },
   ];
-  var QUICK_CATS = ['lanche', 'delivery', 'cafe', 'doces', 'bebida', 'outros'];
-  var QUICK_VALUES = [5, 10, 15, 20, 30, 40, 50, 70];
+  // Receitas sazonais (entram só no mês em que caem)
+  var INCOME_TYPES = [
+    { id: 'bonus', label: 'Bônus', icon: '🎉' },
+    { id: 'reembolso', label: 'Reembolso', icon: '🧾' },
+    { id: 'decimo', label: '13º / Férias', icon: '🏖️' },
+    { id: 'freela', label: 'Freela', icon: '💼' },
+    { id: 'venda', label: 'Venda', icon: '🏷️' },
+    { id: 'extra', label: 'Outra receita', icon: '💰' },
+  ];
+  // Sugestões de receitas que caem todo mês
+  var INCOME_PRESETS = [
+    { name: 'Cartão alimentação', icon: '🍽️' },
+    { name: 'Vale transporte', icon: '🚌' },
+    { name: 'Reembolso fixo', icon: '🧾' },
+    { name: 'Aluguel recebido', icon: '🏠' },
+    { name: 'Renda extra', icon: '💵' },
+  ];
+  var QUICK_SHOW = 8;
   var GOAL_ICONS = ['🛟', '📈', '🏠', '🚗', '🏍️', '✈️', '🎓', '💻', '🎯'];
   var FIXED_ICONS = ['💡', '💧', '🌐', '🏠', '🏍️', '🚗', '📱', '📺', '🏋️', '🎓', '🐶', '🧾'];
 
@@ -80,7 +101,7 @@ function __factory(React, RN, AsyncStorage) {
     defaultPay: 'card:dia', grandePay: 'card:grandes',
   };
   function emptyData() {
-    return { v: 2, setupDone: false, tx: [], fixed: [], fixedMonth: {}, cards: [], goals: [], settings: Object.assign({}, DEFAULT_SETTINGS) };
+    return { v: 2, setupDone: false, tx: [], fixed: [], fixedMonth: {}, incomes: [], incomeMonth: {}, cards: [], goals: [], settings: Object.assign({}, DEFAULT_SETTINGS) };
   }
 
   // ---------- Utilidades ----------
@@ -128,7 +149,7 @@ function __factory(React, RN, AsyncStorage) {
     return new Date(p[0], p[1] - 1, Math.min(Math.max(1, day || 1), dim), hour == null ? 12 : hour, 0, 0);
   }
   function catOf(id) {
-    return DIA_CATS.find(function (c) { return c.id === id; }) || OTHER_CATS.find(function (c) { return c.id === id; }) || { id: id, label: id || 'Outros', icon: '•' };
+    return DIA_CATS.find(function (c) { return c.id === id; }) || INCOME_TYPES.find(function (c) { return c.id === id; }) || OTHER_CATS.find(function (c) { return c.id === id; }) || { id: id, label: id || 'Outros', icon: '•' };
   }
   var fv = function (pmt, ratePct, months) {
     var i = ratePct / 100;
@@ -179,6 +200,19 @@ function __factory(React, RN, AsyncStorage) {
     });
   }
 
+  // ---------- Receitas que caem todo mês (salário + outras) ----------
+  function incomesOf(data, mk) {
+    var im = (data.incomeMonth || {})[mk] || {};
+    var sal = im.salario || {};
+    var list = [{ id: 'salario', name: 'Salário', icon: '💼', isSal: true, amount: sal.amount != null ? Number(sal.amount) : num(data.settings.salario), received: !!sal.received }];
+    (data.incomes || []).forEach(function (r) {
+      if ((r.since && mk < r.since) || (r.until && mk >= r.until)) return;
+      var m = im[r.id] || {};
+      list.push({ id: r.id, name: r.name, icon: r.icon || '💵', r: r, amount: m.amount != null ? Number(m.amount) : num(r.amount), received: !!m.received });
+    });
+    return list;
+  }
+
   // ============================================================
   //  CÁLCULO PRINCIPAL: orçamento do mês e limite diário
   // ============================================================
@@ -187,9 +221,13 @@ function __factory(React, RN, AsyncStorage) {
     var s = data.settings;
     var txM = data.tx.filter(function (t) { return mkOf(t.date) === mk; });
     var byG = function (g) { return txM.filter(function (t) { return t.group === g; }); };
-    var salario = num(s.salario);
-    var extras = sum(byG('extra'));
-    var R = salario + extras;
+    var receitas = incomesOf(data, mk);
+    var salario = receitas[0].amount;
+    var rendas = receitas.slice(1);
+    var RF = sum(rendas);
+    var extrasTx = byG('extra');
+    var extras = sum(extrasTx);
+    var R = salario + RF + extras;
     var fixos = fixedOf(data, mk);
     var F = sum(fixos);
     var M = num(s.mercado);
@@ -255,7 +293,7 @@ function __factory(React, RN, AsyncStorage) {
     var fixosPagos = fixos.filter(function (x) { return x.paid; }).length;
 
     return {
-      mk: mk, txM: txM, salario: salario, extras: extras, R: R, fixos: fixos, F: F, M: M, mercadoReal: mercadoReal,
+      mk: mk, txM: txM, salario: salario, receitas: receitas, rendas: rendas, RF: RF, extrasTx: extrasTx, extras: extras, R: R, fixos: fixos, F: F, M: M, mercadoReal: mercadoReal,
       mercadoExc: mercadoExc, grandes: grandes, G: G, I: I, saldo: saldo, dim: dim, base: base, perDay: perDay,
       diaTx: diaTx, diaGasto: diaGasto, isCur: isCur, isPast: isPast, today: today, gastoAteHoje: gastoAteHoje,
       gastoHoje: gastoHoje, limiteHoje: limiteHoje, disponivelHoje: disponivelHoje, divida: divida,
@@ -382,10 +420,11 @@ function __factory(React, RN, AsyncStorage) {
   }
   function MonthNav(p) {
     return (
-      <Row style={{ justifyContent: 'space-between', marginBottom: 12 }}>
+      <Row style={{ marginBottom: 12, justifyContent: p.left ? 'flex-start' : 'center' }}>
         <TouchableOpacity onPress={function () { p.setMk(addMonths(p.mk, -1)); }} style={st.navBtn}><Text style={st.navTxt}>‹</Text></TouchableOpacity>
-        <Text style={[st.h, { fontSize: 18 }]}>{mkLabel(p.mk)}</Text>
+        <Text style={[st.h, { fontSize: 18, minWidth: 110, textAlign: 'center' }]}>{mkLabel(p.mk)}</Text>
         <TouchableOpacity onPress={function () { p.setMk(addMonths(p.mk, 1)); }} style={st.navBtn}><Text style={st.navTxt}>›</Text></TouchableOpacity>
+        {p.mk !== currentMk() ? <TouchableOpacity onPress={function () { p.setMk(currentMk()); }} style={{ marginLeft: 10 }}><Text style={{ color: C.blue, fontSize: 13 }}>Hoje</Text></TouchableOpacity> : null}
       </Row>
     );
   }
@@ -421,7 +460,10 @@ function __factory(React, RN, AsyncStorage) {
       <Card>
         <H style={{ marginBottom: 6 }}>🧮 Conta do mês</H>
         <Line label="💼 Salário" value={fmt(b.salario)} color={C.green} />
-        {b.extras > 0 ? <Line label="💰 Receitas extras" value={'+ ' + fmt(b.extras)} color={C.green} /> : null}
+        {(b.rendas || []).filter(function (r) { return r.amount > 0; }).map(function (r) {
+          return <Line key={r.id} label={r.icon + ' ' + r.name} value={'+ ' + fmt(r.amount)} color={C.green} />;
+        })}
+        {b.extras > 0 ? <Line label="🎉 Receitas do mês (sazonais)" value={'+ ' + fmt(b.extras)} color={C.green} /> : null}
         <Line label="📌 Gastos fixos" value={'− ' + fmt(b.F)} color={C.red} />
         <Line label="🛒 Mercado" value={'− ' + fmt(b.M)} color={C.red} />
         <Line label="🛋️ Cartão compras grandes" value={'− ' + fmt(b.G)} color={C.red} />
@@ -429,6 +471,11 @@ function __factory(React, RN, AsyncStorage) {
         <View style={{ height: 1, backgroundColor: C.border, marginVertical: 6 }} />
         <Line bold label="= Saldo para o dia a dia" value={fmt(b.saldo)} color={b.saldo > 0 ? C.green : C.red} />
         <Line bold label={'÷ ' + b.dim + ' dias = limite por dia'} value={fmt(b.base)} color={C.green} />
+        {p.onIncome ? (
+          <TouchableOpacity onPress={p.onIncome} style={{ marginTop: 8 }}>
+            <Text style={{ color: C.blue, fontSize: 13 }}>💰 Adicionar ou editar receitas ›</Text>
+          </TouchableOpacity>
+        ) : null}
       </Card>
     );
   }
@@ -494,15 +541,19 @@ function __factory(React, RN, AsyncStorage) {
     var _g = useState([]), parc = _g[0], setParc = _g[1];
     var _h = useState({ desc: '', valor: '', rest: '' }), np = _h[0], setNp = _h[1];
     var _i = useState(false), tried = _i[0], setTried = _i[1];
+    var _j = useState((data.incomes || []).filter(function (r) { return !r.until; }).map(function (r) { return { id: r.id, name: r.name, icon: r.icon, amount: moneyStr(r.amount), since: r.since }; })), rendas = _j[0], setRendas = _j[1];
+    var _k = useState({ name: '', amount: '' }), nr = _k[0], setNr = _k[1];
 
     var sal = parseMoney(salario);
+    var rendasB = rendas.map(function (r) { return { id: r.id, name: r.name, icon: r.icon, amount: parseMoney(r.amount) }; });
+    var RF = sum(rendasB);
     var fixedVals = fixed.map(function (f) { return parseMoney(f.amount); });
     var F = sum(fixedVals, function (x) { return x; });
     var M = parseMoney(mercado);
     var mk = currentMk();
     var G = sum(parc.filter(function (x) { return x.rest > 0; }), function (x) { return x.valor; });
     var I = (sal * parseMoney(invest)) / 100;
-    var saldo = sal - F - M - G - I;
+    var saldo = sal + RF - F - M - G - I;
     var dim = daysInMonth(mk);
 
     var setF = function (i, k, v) { setFixed(fixed.map(function (f, j) { if (j !== i) return f; var n = Object.assign({}, f); n[k] = v; return n; })); };
@@ -536,6 +587,10 @@ function __factory(React, RN, AsyncStorage) {
         return Object.assign({}, d, {
           setupDone: true, startDate: d.startDate || new Date().toISOString(), cards: cards, tx: d.tx.concat(newTx),
           fixed: fixed.map(function (f) { return { id: f.id, name: f.name, icon: f.icon, varia: f.varia, day: parseInt(f.day, 10) || 10, amount: parseMoney(f.amount) }; }),
+          incomes: (d.incomes || []).filter(function (r) { return r.until; }).concat(rendasB.filter(function (r) { return r.amount > 0; }).map(function (r) {
+            var old = rendas.find(function (x) { return x.id === r.id; });
+            return { id: r.id, name: r.name, icon: r.icon, amount: r.amount, since: (old && old.since) || mk };
+          })),
           settings: Object.assign({}, d.settings, { salario: sal, mercado: M, investPct: parseMoney(invest) }),
         });
       });
@@ -556,6 +611,29 @@ function __factory(React, RN, AsyncStorage) {
               <H>💼 Quanto você recebe por mês?</H>
               <Muted style={{ marginVertical: 6 }}>Salário líquido, o que cai na conta.</Muted>
               <TextInput autoFocus value={salario} onChangeText={setSalario} placeholder="0,00" placeholderTextColor={C.border} keyboardType="decimal-pad" style={st.bigInput} />
+              <View style={{ height: 1, backgroundColor: C.border, marginVertical: 10 }} />
+              <H>🔁 Outras receitas todo mês (opcional)</H>
+              <Muted style={{ marginVertical: 6, fontSize: 12 }}>Cartão alimentação, reembolso fixo… Bônus e receitas de um mês só você lança depois em “+ › Receita”.</Muted>
+              {rendas.map(function (r, i) {
+                return (
+                  <Row key={r.id} style={st.listRow}>
+                    <Text style={[st.txt, { flex: 1 }]}>{r.icon} {r.name}</Text>
+                    <TextInput value={r.amount} onChangeText={function (v) { setRendas(rendas.map(function (x, j) { return j === i ? Object.assign({}, x, { amount: v }) : x; })); }} keyboardType="decimal-pad" style={[st.input, { width: 95, marginRight: 8 }]} />
+                    <TouchableOpacity onPress={function () { setRendas(rendas.filter(function (_, j) { return j !== i; })); }}><Text style={{ color: C.muted }}>🗑</Text></TouchableOpacity>
+                  </Row>
+                );
+              })}
+              <View style={st.grid}>
+                {INCOME_PRESETS.map(function (x) { return <Chip key={x.name} label={x.icon + ' ' + x.name} active={nr.name === x.name} color={C.green} onPress={function () { setNr(Object.assign({}, nr, { name: x.name, icon: x.icon })); }} />; })}
+              </View>
+              <Row>
+                <TextInput value={nr.name} onChangeText={function (v) { setNr(Object.assign({}, nr, { name: v })); }} placeholder="Nome" placeholderTextColor={C.muted} style={[st.input, { flex: 1, marginRight: 8 }]} />
+                <TextInput value={nr.amount} onChangeText={function (v) { setNr(Object.assign({}, nr, { amount: v })); }} placeholder="R$" placeholderTextColor={C.muted} keyboardType="decimal-pad" style={[st.input, { width: 80, marginRight: 8 }]} />
+                <Btn small label="+ Add" outline onPress={function () {
+                  if (!nr.name.trim() || parseMoney(nr.amount) <= 0) return Alert.alert('Preencha', 'Nome e valor.');
+                  setRendas(rendas.concat([{ id: uid(), name: nr.name.trim(), icon: nr.icon || '💵', amount: nr.amount }])); setNr({ name: '', amount: '' });
+                }} />
+              </Row>
             </Card>
           ) : null}
 
@@ -625,7 +703,7 @@ function __factory(React, RN, AsyncStorage) {
                 <Muted style={{ marginVertical: 6 }}>% do salário separado antes de tudo.</Muted>
                 <Field value={invest} onChangeText={setInvest} keyboardType="decimal-pad" />
               </Card>
-              <Formula investPct={parseMoney(invest)} b={{ salario: sal, extras: 0, F: F, M: M, G: G, I: I, saldo: saldo, dim: dim, base: saldo > 0 ? saldo / dim : 0 }} />
+              <Formula investPct={parseMoney(invest)} b={{ salario: sal, rendas: rendasB, extras: 0, F: F, M: M, G: G, I: I, saldo: saldo, dim: dim, base: saldo > 0 ? saldo / dim : 0 }} />
               {saldo <= 0 ? <Card style={{ borderColor: C.red }}><Text style={[st.txt, { color: C.red }]}>A conta não fecha: faltam {fmt(-saldo)}. Revise os valores ou reduza a % de investimento.</Text></Card> : null}
             </View>
           ) : null}
@@ -647,27 +725,41 @@ function __factory(React, RN, AsyncStorage) {
     var data = p.data;
     var mk = currentMk();
     var b = useMemo(function () { return budget(data, mk); }, [data]);
-    var _a = useState('lanche'), qCat = _a[0], setQCat = _a[1];
+    var _a = useState(null), qCat = _a[0], setQCat = _a[1];
     var _b = useState(''), qVal = _b[0], setQVal = _b[1];
+    var _c = useState(false), showAll = _c[0], setShowAll = _c[1];
     var recent = b.diaTx.slice().sort(function (x, y) { return new Date(y.date) - new Date(x.date); }).slice(0, 5);
     var color = b.divida > 0 || b.saldo <= 0 ? C.red : b.disponivelHoje < b.base * 0.3 ? C.yellow : C.green;
 
-    var quick = function (v) {
-      var val = parseMoney(v);
-      if (val <= 0) return;
+    // categorias mais usadas primeiro
+    var cats = useMemo(function () {
+      var cnt = {};
+      data.tx.forEach(function (t) { if (t.group === 'dia') cnt[t.cat] = (cnt[t.cat] || 0) + 1; });
+      return DIA_CATS.map(function (c, i) { return { c: c, n: cnt[c.id] || 0, i: i }; })
+        .sort(function (x, y) { return y.n - x.n || x.i - y.i; }).map(function (x) { return x.c; });
+    }, [data.tx]);
+    var shown = showAll ? cats : cats.slice(0, QUICK_SHOW);
+    if (qCat && !shown.some(function (c) { return c.id === qCat; })) shown = shown.slice(0, QUICK_SHOW - 1).concat([catOf(qCat)]);
+
+    var launch = function () {
+      if (!qCat) return Alert.alert('Escolha o tipo', 'Toque no tipo de gasto (lanche, farmácia, combustível…) e depois digite o valor.');
+      var val = parseMoney(qVal);
+      if (val <= 0) return Alert.alert('Valor', 'Digite quanto você gastou.');
       p.addTx([{ id: uid(), group: 'dia', amount: val, cat: qCat, desc: catOf(qCat).label, date: new Date().toISOString(), hasTime: true, pay: data.settings.defaultPay || 'card:dia' }]);
-      setQVal('');
+      setQVal(''); setQCat(null); setShowAll(false);
+      if (RN.Keyboard) RN.Keyboard.dismiss();
     };
 
     return (
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
       <ScrollView contentContainerStyle={st.screen} keyboardShouldPersistTaps="handled">
-        <Row style={{ justifyContent: 'space-between', marginBottom: 14 }}>
-          <View>
-            <Muted>{mkLabel(mk)} · dia {b.today} de {b.dim}</Muted>
+        <View style={{ marginBottom: 14 }}>
+          <Muted>{mkLabel(mk)} · dia {b.today} de {b.dim}</Muted>
+          <Row>
             <Text style={[st.h, { fontSize: 24 }]}>Meu Dinheiro</Text>
-          </View>
-          <TouchableOpacity onPress={p.goAjustes} style={st.navBtn}><Text style={{ fontSize: 20 }}>⚙️</Text></TouchableOpacity>
-        </Row>
+            <TouchableOpacity onPress={p.goAjustes} style={[st.navBtn, { width: 34, height: 34, marginLeft: 10 }]}><Text style={{ fontSize: 16 }}>⚙️</Text></TouchableOpacity>
+          </Row>
+        </View>
 
         {b.fixosPendentes.length > 0 ? (
           <TouchableOpacity onPress={p.goFixos}>
@@ -682,7 +774,7 @@ function __factory(React, RN, AsyncStorage) {
         {b.saldo <= 0 ? (
           <Card style={{ borderColor: C.red }}>
             <H style={{ color: C.red }}>O mês não fecha</H>
-            <Muted style={{ marginTop: 4 }}>Fixos + mercado + parcelas + investimento passam do salário em {fmt(-b.saldo)}. Não sobra nada para o dia a dia.</Muted>
+            <Muted style={{ marginTop: 4 }}>Fixos + mercado + parcelas + investimento passam das receitas em {fmt(-b.saldo)}. Não sobra nada para o dia a dia.</Muted>
           </Card>
         ) : null}
 
@@ -703,42 +795,34 @@ function __factory(React, RN, AsyncStorage) {
 
         <Card>
           <H>💳 Lançar gasto do dia a dia</H>
-          <Muted style={{ fontSize: 12, marginTop: 2 }}>Vai no {payLabel(data.settings.defaultPay, data.cards) || 'Pix'} · 1 toque lança</Muted>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginVertical: 8 }}>
-            {QUICK_CATS.map(function (id) {
-              return <Chip key={id} label={catOf(id).icon + ' ' + catOf(id).label} active={qCat === id} onPress={function () { setQCat(id); }} color={C.red} />;
-            })}
-          </ScrollView>
+          <Muted style={{ fontSize: 12, marginTop: 2, marginBottom: 10 }}>1. Toque no tipo  ·  2. Digite o valor  ·  vai no {payLabel(data.settings.defaultPay, data.cards) || 'Pix'}</Muted>
           <View style={st.grid}>
-            {QUICK_VALUES.map(function (v) {
-              return <TouchableOpacity key={v} style={st.quickBtn} onPress={function () { quick(v); }}><Text style={st.quickTxt}>R$ {v}</Text></TouchableOpacity>;
+            {shown.map(function (c) {
+              var on = qCat === c.id;
+              return (
+                <TouchableOpacity key={c.id} onPress={function () { setQCat(on ? null : c.id); }} style={[st.catBtn, on && { borderColor: C.red, backgroundColor: C.red + '22' }]}>
+                  <Text style={{ fontSize: 22 }}>{c.icon}</Text>
+                  <Text style={[st.catTxt, on && { color: C.red, fontWeight: '700' }]} numberOfLines={1}>{c.label}</Text>
+                </TouchableOpacity>
+              );
             })}
           </View>
+          <TouchableOpacity onPress={function () { setShowAll(!showAll); }} style={{ alignSelf: 'center', marginTop: -4, marginBottom: 10 }}>
+            <Text style={{ color: C.blue, fontSize: 13 }}>{showAll ? 'Mostrar menos ▲' : 'Mais tipos ▼'}</Text>
+          </TouchableOpacity>
           <Row>
-            <TextInput value={qVal} onChangeText={setQVal} placeholder="Outro valor" placeholderTextColor={C.muted} keyboardType="decimal-pad" style={[st.input, { flex: 1, marginRight: 8 }]} />
-            <Btn label="Lançar" onPress={function () { quick(qVal); }} color={C.red} />
+            <View style={[st.input, { flex: 1, marginRight: 8, flexDirection: 'row', alignItems: 'center', paddingVertical: 0 }, qCat && { borderColor: C.red }]}>
+              <Text style={{ color: C.muted, fontSize: 18, marginRight: 6 }}>{qCat ? catOf(qCat).icon : 'R$'}</Text>
+              <TextInput value={qVal} onChangeText={setQVal} placeholder={qCat ? 'Valor de ' + catOf(qCat).label.toLowerCase() : '0,00'} placeholderTextColor={C.muted}
+                keyboardType="decimal-pad" style={{ flex: 1, color: C.text, fontSize: 20, fontWeight: '700', paddingVertical: 12 }} />
+            </View>
+            <Btn label="Lançar" onPress={launch} color={C.red} disabled={!qCat || parseMoney(qVal) <= 0} />
           </Row>
         </Card>
 
         <NextDays b={b} />
 
-        <Card>
-          <H style={{ marginBottom: 8 }}>📊 Controle do mês</H>
-          <Row style={{ justifyContent: 'space-between' }}><Text style={st.txt}>💳 Dia a dia</Text><Text style={st.txt}>{fmt(b.diaGasto)} de {fmt(b.saldoDiaMes)}</Text></Row>
-          <View style={{ marginVertical: 6 }}><Bar value={b.diaGasto} max={b.saldoDiaMes} color={b.gastoAteHoje > b.base * b.diasCorridos ? C.red : C.green} height={10} /></View>
-          <Muted style={{ fontSize: 12, marginBottom: 10 }}>{b.firstDay > 1 ? 'Contando a partir do dia ' + b.firstDay + ' (quando você começou). ' : ''}Sobra no mês: {fmt(b.restanteMes)} · {b.diasRest} dia(s) restantes · passou do limite em {b.diasAcima} dia(s)</Muted>
-
-          <Row style={{ justifyContent: 'space-between' }}><Text style={st.txt}>🛒 Mercado</Text><Text style={st.txt}>{fmt(b.mercadoReal)} de {fmt(b.M)}</Text></Row>
-          <View style={{ marginVertical: 6 }}><Bar value={b.mercadoReal} max={b.M} color={b.mercadoReal > b.M ? C.red : C.yellow} /></View>
-
-          <TouchableOpacity onPress={p.goFixos}>
-            <Row style={{ justifyContent: 'space-between', marginTop: 6 }}><Text style={st.txt}>📌 Fixos ({b.fixosPagos}/{b.fixos.length} pagos)</Text><Text style={st.txt}>{fmt(b.F)} ›</Text></Row>
-          </TouchableOpacity>
-          <Row style={{ justifyContent: 'space-between', marginTop: 8 }}><Text style={st.txt}>🛋️ Parcelas compras grandes</Text><Text style={st.txt}>{fmt(b.G)}</Text></Row>
-          <Row style={{ justifyContent: 'space-between', marginTop: 8 }}><Text style={st.txt}>🛟 Investir/reservar</Text><Text style={[st.txt, { color: C.blue }]}>{fmt(b.invested)} de {fmt(b.I)}</Text></Row>
-        </Card>
-
-        <Formula b={b} investPct={data.settings.investPct} />
+        <Formula b={b} investPct={data.settings.investPct} onIncome={p.goReceitas} />
 
         <Row style={{ justifyContent: 'space-between', marginTop: 6, marginBottom: 8 }}>
           <H>Últimos gastos do dia a dia</H>
@@ -749,6 +833,7 @@ function __factory(React, RN, AsyncStorage) {
             recent.map(function (t) { return <TxItem key={t.id} t={t} cards={data.cards} onPress={function () { p.openTx(t); }} />; })}
         </Card>
       </ScrollView>
+      </KeyboardAvoidingView>
     );
   }
 
@@ -844,6 +929,145 @@ function __factory(React, RN, AsyncStorage) {
   }
 
   // ============================================================
+  //  Tela: Receitas (fixas de todo mês + sazonais do mês)
+  // ============================================================
+  function ReceitasScreen(p) {
+    var data = p.data;
+    var mk = p.mk, setMk = p.setMk;
+    var b = budget(data, mk);
+    var list = b.receitas;
+    var _b = useState({}), edit = _b[0], setEdit = _b[1];
+    var _c = useState({ name: '', icon: '💵', amount: '' }), nr = _c[0], setNr = _c[1];
+    var _d = useState('bonus'), sType = _d[0], setSType = _d[1];
+    var _e = useState(''), sVal = _e[0], setSVal = _e[1];
+    var _f = useState(''), sDesc = _f[0], setSDesc = _f[1];
+
+    var setMonth = function (id, patch) {
+      p.update(function (d) {
+        var im = Object.assign({}, d.incomeMonth || {});
+        var m = Object.assign({}, im[mk] || {});
+        m[id] = Object.assign({}, m[id] || {}, patch);
+        im[mk] = m;
+        var out = Object.assign({}, d, { incomeMonth: im });
+        // mudou o valor no mês atual ou futuro: vira o novo padrão dos próximos meses
+        if (patch.amount != null && mk >= currentMk()) {
+          if (id === 'salario') out.settings = Object.assign({}, d.settings, { salario: patch.amount });
+          else out.incomes = (d.incomes || []).map(function (r) { return r.id === id ? Object.assign({}, r, { amount: patch.amount }) : r; });
+        }
+        return out;
+      });
+    };
+    var saveVal = function (x) {
+      var v = parseMoney(edit[x.id]);
+      if (v < 0) return;
+      setMonth(x.id, { amount: v });
+      var e = Object.assign({}, edit); delete e[x.id]; setEdit(e);
+      p.toast('✅ ' + x.name + ': ' + fmt(v) + ' em ' + mkLabel(mk));
+    };
+    var addRec = function () {
+      var a = parseMoney(nr.amount);
+      if (!nr.name.trim() || a <= 0) return Alert.alert('Preencha', 'Nome e valor da receita que cai todo mês.');
+      p.update(function (d) { return Object.assign({}, d, { incomes: (d.incomes || []).concat([{ id: uid(), name: nr.name.trim(), icon: nr.icon, amount: a, since: mk }]) }); });
+      setNr({ name: '', icon: '💵', amount: '' });
+      p.toast('✅ ' + nr.name.trim() + ' entra todo mês a partir de ' + mkLabel(mk));
+    };
+    var delRec = function (x) {
+      Alert.alert('Parar esta receita', x.name + ' deixa de entrar a partir de ' + mkLabel(mk) + '. Os meses anteriores continuam como estão.', [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Remover', style: 'destructive', onPress: function () {
+          p.update(function (d) {
+            var r = (d.incomes || []).find(function (k) { return k.id === x.id; });
+            // se começou neste mês ou depois, some de vez; senão vira histórico
+            if (!r || !r.since || r.since >= mk) return Object.assign({}, d, { incomes: (d.incomes || []).filter(function (k) { return k.id !== x.id; }) });
+            var hist = Object.assign({}, d.incomeMonth || {});
+            for (var m2 = r.since; m2 < mk; m2 = addMonths(m2, 1)) {
+              var mm = Object.assign({}, hist[m2] || {});
+              mm[x.id] = Object.assign({ amount: r.amount }, mm[x.id] || {});
+              hist[m2] = mm;
+            }
+            return Object.assign({}, d, { incomeMonth: hist, incomes: (d.incomes || []).map(function (k) { return k.id === x.id ? Object.assign({}, k, { until: mk }) : k; }) });
+          });
+        } },
+      ]);
+    };
+    var addSazonal = function () {
+      var v = parseMoney(sVal);
+      if (v <= 0) return Alert.alert('Valor', 'Digite o valor que entrou.');
+      var t = catOf(sType);
+      var date = mk === currentMk() ? new Date() : dateInMonth(mk, 15);
+      p.addTx([{ id: uid(), group: 'extra', cat: sType, amount: v, desc: sDesc.trim() || t.label, date: date.toISOString() }]);
+      setSVal(''); setSDesc('');
+    };
+
+    return (
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+        <ScrollView contentContainerStyle={st.screen} keyboardShouldPersistTaps="handled">
+          <Header title="💰 Receitas" back={p.back} />
+          <MonthNav mk={mk} setMk={setMk} />
+          <Card>
+            <Row>
+              <Stat label="Total do mês" value={fmt(b.R)} color={C.green} />
+              <Stat label="Limite por dia" value={fmt(b.base)} color={C.green} />
+            </Row>
+            <Muted style={{ fontSize: 12, marginTop: 8 }}>Toda receita aumenta o saldo do mês e o seu limite diário. Os {data.settings.investPct}% de investimento são calculados só sobre o salário.</Muted>
+          </Card>
+
+          <H style={{ marginTop: 4, marginBottom: 4 }}>🔁 Caem todo mês</H>
+          <Muted style={{ fontSize: 12, marginBottom: 8 }}>Salário, cartão alimentação, reembolso fixo… Se num mês vier diferente, mude o valor só daquele mês.</Muted>
+          {list.map(function (x) {
+            var val = edit[x.id] != null ? edit[x.id] : moneyStr(x.amount);
+            var dirty = edit[x.id] != null;
+            return (
+              <Card key={x.id}>
+                <Row style={{ justifyContent: 'space-between' }}>
+                  <Text style={[st.h, { flex: 1 }]}>{x.icon} {x.name}</Text>
+                  {!x.isSal ? <TouchableOpacity onPress={function () { delRec(x); }}><Text style={{ color: C.muted }}>🗑</Text></TouchableOpacity> : null}
+                </Row>
+                <Row style={{ marginTop: 10 }}>
+                  <TextInput value={val} onChangeText={function (v) { var e = Object.assign({}, edit); e[x.id] = v; setEdit(e); }} keyboardType="decimal-pad" placeholder="R$" placeholderTextColor={C.muted} style={[st.input, { flex: 1, marginRight: 8 }, dirty && { borderColor: C.yellow }]} />
+                  {dirty ? <Btn small label="Salvar" color={C.yellow} onPress={function () { saveVal(x); }} style={{ marginRight: 8 }} /> : null}
+                  <Btn small label={x.received ? '✅ Recebido' : 'Recebi'} outline={!x.received} color={C.green} onPress={function () { setMonth(x.id, { received: !x.received }); }} />
+                </Row>
+              </Card>
+            );
+          })}
+          <Card style={{ borderStyle: 'dashed' }}>
+            <H style={{ marginBottom: 8 }}>+ Nova receita de todo mês</H>
+            <View style={st.grid}>
+              {INCOME_PRESETS.map(function (x) {
+                return <Chip key={x.name} label={x.icon + ' ' + x.name} active={nr.name === x.name} color={C.green} onPress={function () { setNr(Object.assign({}, nr, { name: x.name, icon: x.icon })); }} />;
+              })}
+            </View>
+            <Row>
+              <Field wrap={{ flex: 1, marginRight: 8 }} label="Nome" value={nr.name} onChangeText={function (v) { setNr(Object.assign({}, nr, { name: v })); }} placeholder="Ex: Cartão alimentação" />
+              <Field wrap={{ width: 110 }} label="Valor" value={nr.amount} onChangeText={function (v) { setNr(Object.assign({}, nr, { amount: v })); }} keyboardType="decimal-pad" placeholder="0,00" />
+            </Row>
+            <Btn label="Adicionar" outline onPress={addRec} />
+          </Card>
+
+          <H style={{ marginTop: 8, marginBottom: 4 }}>🎉 Só neste mês</H>
+          <Muted style={{ fontSize: 12, marginBottom: 8 }}>Bônus, reembolso de uma despesa, 13º, freela, venda… Entra apenas em {mkLabel(mk)}.</Muted>
+          <Card>
+            <View style={st.grid}>
+              {INCOME_TYPES.map(function (x) { return <Chip key={x.id} label={x.icon + ' ' + x.label} active={sType === x.id} color={C.green} onPress={function () { setSType(x.id); }} />; })}
+            </View>
+            <Row>
+              <Field wrap={{ flex: 1, marginRight: 8 }} label="Descrição (opcional)" value={sDesc} onChangeText={setSDesc} placeholder={'Ex: ' + (sType === 'reembolso' ? 'viagem da empresa' : catOf(sType).label)} />
+              <Field wrap={{ width: 110 }} label="Valor" value={sVal} onChangeText={setSVal} keyboardType="decimal-pad" placeholder="0,00" />
+            </Row>
+            <Btn label={'+ Adicionar em ' + mkLabel(mk)} onPress={addSazonal} />
+          </Card>
+          {b.extrasTx.length ? (
+            <Card style={{ paddingVertical: 4 }}>
+              {b.extrasTx.map(function (t) { return <TxItem key={t.id} t={t} cards={data.cards} onPress={function () { p.openTx(t); }} />; })}
+            </Card>
+          ) : null}
+        </ScrollView>
+      </KeyboardAvoidingView>
+    );
+  }
+
+  // ============================================================
   //  Tela: Lançar
   // ============================================================
   function AddScreen(p) {
@@ -858,6 +1082,8 @@ function __factory(React, RN, AsyncStorage) {
     var _h = useState('nova'), gMode = _h[0], setGMode = _h[1];
     var _i = useState('hoje'), dateMode = _i[0], setDateMode = _i[1];
     var _j = useState(''), dateStr = _j[0], setDateStr = _j[1];
+    var _k = useState('bonus'), inType = _k[0], setInType = _k[1];
+    var _l = useState(false), repeat = _l[0], setRepeat = _l[1];
 
     var pays = allPays(data.cards);
     var switchGroup = function (g) {
@@ -886,7 +1112,7 @@ function __factory(React, RN, AsyncStorage) {
       if (dateMode === 'hoje') { base = new Date(); hasTime = true; }
       else if (dateMode === 'ontem') { base = new Date(); base.setDate(base.getDate() - 1); base.setHours(12, 0, 0, 0); }
       else { base = parseDateBR(dateStr); if (!base) { Alert.alert('Data inválida', 'Use o formato DD/MM/AAAA.'); return null; } }
-      var c = group === 'dia' ? cat : group;
+      var c = group === 'dia' ? cat : group === 'extra' ? inType : group;
       return [{ id: uid(), group: group, cat: c, amount: val, desc: desc.trim() || catOf(c).label, date: base.toISOString(), hasTime: hasTime, pay: group === 'extra' ? undefined : pay }];
     };
 
@@ -904,6 +1130,15 @@ function __factory(React, RN, AsyncStorage) {
     }
 
     var save = function () {
+      if (group === 'extra' && repeat) {
+        var v = parseMoney(amount);
+        if (v <= 0) return Alert.alert('Valor inválido', 'Digite um valor maior que zero.');
+        if (!desc.trim()) return Alert.alert('Nome', 'Dê um nome para a receita (ex: Cartão alimentação).');
+        p.update(function (d) { return Object.assign({}, d, { incomes: (d.incomes || []).concat([{ id: uid(), name: desc.trim(), icon: catOf(inType).icon, amount: v, since: currentMk() }]) }); });
+        p.toast('🔁 ' + desc.trim() + ' (' + fmt(v) + ') entra todo mês a partir de ' + mkLabel(currentMk()));
+        setAmount(''); setDesc(''); setRepeat(false);
+        return;
+      }
       var list = buildList();
       if (!list) return;
       p.addTx(list);
@@ -923,7 +1158,7 @@ function __factory(React, RN, AsyncStorage) {
             {group === 'dia' ? 'Sai do seu limite diário. Se passar, come os próximos dias.' :
               group === 'mercado' ? 'Sai do orçamento de mercado (' + fmt(s.mercado) + '/mês). O que passar sai do limite diário.' :
                 group === 'grande' ? 'Geladeira, guarda-roupa, cama… As parcelas entram na conta de cada mês e reduzem o limite diário.' :
-                  'Dinheiro a mais que entrou no mês. Aumenta o saldo e o limite diário.'}
+                  'Dinheiro que entrou além do salário. Aumenta o saldo e o limite diário.'}
           </Muted>
 
           {group === 'grande' ? (
@@ -936,7 +1171,7 @@ function __factory(React, RN, AsyncStorage) {
           <Card>
             <Muted>{group === 'grande' && gMode === 'andamento' ? 'Valor da parcela' : group === 'grande' ? 'Valor total' : 'Valor'}</Muted>
             <TextInput value={amount} onChangeText={setAmount} placeholder="0,00" placeholderTextColor={C.border} keyboardType="decimal-pad" style={st.bigInput} />
-            <Field label={group === 'grande' ? 'O que comprou' : 'Descrição (opcional)'} value={desc} onChangeText={setDesc} placeholder={group === 'grande' ? 'Ex: Geladeira' : 'Ex: coxinha na padaria'} />
+            <Field label={group === 'grande' ? 'O que comprou' : group === 'extra' && repeat ? 'Nome da receita' : 'Descrição (opcional)'} value={desc} onChangeText={setDesc} placeholder={group === 'grande' ? 'Ex: Geladeira' : group === 'extra' ? 'Ex: ' + (repeat ? 'Cartão alimentação' : catOf(inType).label) : 'Ex: coxinha na padaria'} />
             {group === 'grande' ? (
               <View>
                 <Field label={gMode === 'andamento' ? 'Quantas parcelas faltam (contando este mês)' : 'Parcelas'} value={parcelas} onChangeText={setParcelas} keyboardType="number-pad" />
@@ -959,6 +1194,20 @@ function __factory(React, RN, AsyncStorage) {
               <Text style={[st.txt, { marginTop: 6 }]}>{preview.n}x de {fmt(preview.parcela)} a partir de {mkLabel(preview.mk)}.</Text>
               <Text style={[st.txt, { marginTop: 4 }]}>Limite diário em {mkLabel(preview.mk)}: <Text style={{ color: C.red, fontWeight: '700' }}>{fmt(preview.antes)} → {fmt(preview.depois)}</Text></Text>
             </Card>
+          ) : null}
+
+          {group === 'extra' ? (
+            <View>
+              <Text style={st.label}>Com que frequência?</Text>
+              <Row style={{ marginBottom: 8 }}>
+                <Chip label="Só este mês" active={!repeat} onPress={function () { setRepeat(false); }} />
+                <Chip label="🔁 Todo mês" active={repeat} onPress={function () { setRepeat(true); }} />
+              </Row>
+              <Text style={st.label}>Tipo</Text>
+              <View style={st.grid}>
+                {INCOME_TYPES.map(function (x) { return <Chip key={x.id} label={x.icon + ' ' + x.label} active={inType === x.id} onPress={function () { setInType(x.id); }} />; })}
+              </View>
+            </View>
           ) : null}
 
           {group === 'dia' ? (
@@ -986,7 +1235,7 @@ function __factory(React, RN, AsyncStorage) {
             </View>
           ) : null}
 
-          {group !== 'grande' ? (
+          {group !== 'grande' && !(group === 'extra' && repeat) ? (
             <View>
               <Text style={st.label}>Data</Text>
               <Row style={{ marginBottom: 8 }}>
@@ -1060,6 +1309,8 @@ function __factory(React, RN, AsyncStorage) {
     var data = p.data, mk = p.mk;
     var a = useMemo(function () { return analyze(data, mk); }, [data, mk]);
     var b = a.b;
+    var _o = useState(null), openCat = _o[0], setOpenCat = _o[1];
+    var diaTotal = b.diaGasto > 0 ? b.diaGasto : 1;
     var scoreColor = a.score >= 75 ? C.green : a.score >= 50 ? C.yellow : C.red;
     var scoreTxt = a.score >= 75 ? 'No controle' : a.score >= 50 ? 'Atenção' : 'Crítico';
     var maxDay = Math.max.apply(null, b.perDay.concat([b.base, 1]));
@@ -1100,7 +1351,28 @@ function __factory(React, RN, AsyncStorage) {
           {a.worst.length ? <Muted style={{ fontSize: 12, marginTop: 8 }}>Piores dias: {a.worst.map(function (w) { return 'dia ' + w.day + ' (' + fmt(w.v) + ')'; }).join(', ')}</Muted> : null}
         </Card>
 
-        <Formula b={b} investPct={data.settings.investPct} />
+        <Formula b={b} investPct={data.settings.investPct} onIncome={p.goReceitas} />
+
+        <Card>
+          <H style={{ marginBottom: 12 }}>🎯 Orçamento x realizado</H>
+          {[
+            { icon: '💳', label: 'Dia a dia', v: b.diaGasto, max: b.saldoDiaMes, col: b.gastoAteHoje > b.base * b.diasCorridos ? C.red : C.green },
+            { icon: '🛒', label: 'Mercado', v: b.mercadoReal, max: b.M, col: b.mercadoReal > b.M ? C.red : C.yellow },
+            { icon: '📌', label: 'Fixos pagos (' + b.fixosPagos + '/' + b.fixos.length + ')', v: sum(b.fixos.filter(function (x) { return x.paid; })), max: b.F, col: C.blue },
+            { icon: '🛟', label: 'Investido/guardado', v: b.invested, max: b.I, col: C.blue },
+          ].map(function (r) {
+            return (
+              <View key={r.label} style={{ marginBottom: 12 }}>
+                <Row style={{ justifyContent: 'space-between', marginBottom: 5 }}>
+                  <Text style={st.txt}>{r.icon} {r.label}</Text>
+                  <Text style={[st.txt, { color: C.muted }]}><Text style={{ color: C.text, fontWeight: '700' }}>{fmt(r.v)}</Text> de {fmt(r.max)}</Text>
+                </Row>
+                <Bar value={r.v} max={r.max} color={r.col} height={8} />
+              </View>
+            );
+          })}
+          {b.isCur && b.firstDay > 1 ? <Muted style={{ fontSize: 12 }}>Dia a dia contado a partir do dia {b.firstDay}, quando você começou a usar o app.</Muted> : null}
+        </Card>
 
         <Card style={{ borderColor: C.red }}>
           <H style={{ marginBottom: 8 }}>🔎 Raio-X do dia a dia</H>
@@ -1124,19 +1396,37 @@ function __factory(React, RN, AsyncStorage) {
         </Card>
 
         <Card>
-          <H style={{ marginBottom: 10 }}>Para onde foi o dia a dia</H>
+          <H style={{ marginBottom: 2 }}>Gastos por categoria</H>
+          <Muted style={{ fontSize: 12, marginBottom: 12 }}>Dia a dia do mês · toque numa categoria para ver os lançamentos</Muted>
           {a.topCats.length === 0 ? <Muted>Sem gastos neste mês.</Muted> : null}
-          {a.topCats.slice(0, 8).map(function (c) {
+          {a.topCats.map(function (c) {
+            var cc = catOf(c.id), open = openCat === c.id;
+            var items = open ? b.diaTx.filter(function (t) { return t.cat === c.id; }).sort(function (x, y) { return new Date(y.date) - new Date(x.date); }) : [];
             return (
-              <View key={c.id} style={{ marginBottom: 8 }}>
-                <Row style={{ justifyContent: 'space-between', marginBottom: 3 }}>
-                  <Text style={st.txt}>{catOf(c.id).icon} {catOf(c.id).label} <Text style={{ color: C.muted }}>({c.count}x)</Text></Text>
-                  <Text style={st.txt}>{fmt(c.total)}</Text>
-                </Row>
-                <Bar value={c.total} max={a.topCats[0].total} color={C.purple} height={6} />
+              <View key={c.id} style={{ marginBottom: 10 }}>
+                <TouchableOpacity onPress={function () { setOpenCat(open ? null : c.id); }}>
+                  <Row style={{ justifyContent: 'space-between', marginBottom: 4 }}>
+                    <Text style={[st.txt, { flex: 1 }]} numberOfLines={1}>{cc.icon} {cc.label} <Text style={{ color: C.muted }}>· {c.count}x · {Math.round((c.total / diaTotal) * 100)}%</Text></Text>
+                    <Text style={[st.txt, { fontWeight: '700' }]}>{fmt(c.total)} <Text style={{ color: C.muted }}>{open ? '▲' : '▼'}</Text></Text>
+                  </Row>
+                  <Bar value={c.total} max={a.topCats[0].total} color={C.purple} height={6} />
+                </TouchableOpacity>
+                {open ? (
+                  <View style={{ marginTop: 4, paddingLeft: 8, borderLeftWidth: 2, borderLeftColor: C.purple }}>
+                    {items.map(function (t) { return <TxItem key={t.id} t={t} cards={data.cards} onPress={function () { if (p.openTx) p.openTx(t); }} />; })}
+                  </View>
+                ) : null}
               </View>
             );
           })}
+          {b.mercadoReal > 0 || b.G > 0 || b.F > 0 ? (
+            <View style={{ marginTop: 6, paddingTop: 10, borderTopWidth: 1, borderTopColor: C.border }}>
+              <Muted style={{ fontSize: 12, marginBottom: 4 }}>Fora do dia a dia</Muted>
+              <Line label="🛒 Mercado" value={fmt(b.mercadoReal)} />
+              <Line label="📌 Gastos fixos" value={fmt(b.F)} />
+              <Line label="🛋️ Parcelas compras grandes" value={fmt(b.G)} />
+            </View>
+          ) : null}
         </Card>
 
         <Card>
@@ -1360,6 +1650,9 @@ function __factory(React, RN, AsyncStorage) {
             <Btn label="Salvar" onPress={saveSettings} />
           </Card>
 
+          <TouchableOpacity onPress={p.goReceitas}>
+            <Card><Row style={{ justifyContent: 'space-between' }}><H>💰 Receitas</H><Text style={st.txt}>{1 + (data.incomes || []).filter(function (r) { return !r.until; }).length} todo mês ›</Text></Row></Card>
+          </TouchableOpacity>
           <TouchableOpacity onPress={p.goFixos}>
             <Card><Row style={{ justifyContent: 'space-between' }}><H>📌 Gastos fixos</H><Text style={st.txt}>{data.fixed.length} itens ›</Text></Row></Card>
           </TouchableOpacity>
@@ -1460,6 +1753,8 @@ function __factory(React, RN, AsyncStorage) {
     var d = Object.assign(emptyData(), obj || {});
     d.settings = Object.assign({}, DEFAULT_SETTINGS, (obj && obj.settings) || {});
     d.fixedMonth = d.fixedMonth || {};
+    d.incomes = d.incomes || [];
+    d.incomeMonth = d.incomeMonth || {};
     d.fixed = (d.fixed || []).map(function (f) { return Object.assign({ icon: '🧾', varia: false, day: 10 }, f); });
     d.cards = (d.cards || []).map(function (c) { return Object.assign({ role: 'dia', closingDay: 1, dueDay: 10, limit: 0 }, c); });
     d.goals = d.goals || [];
@@ -1501,6 +1796,9 @@ function __factory(React, RN, AsyncStorage) {
     var _e = useState(null), txOpen = _e[0], setTxOpen = _e[1];
     var _f = useState(''), msg = _f[0], setMsg = _f[1];
     var _g = useState(false), redo = _g[0], setRedo = _g[1];
+    var _h = useState('home'), backTo = _h[0], setBackTo = _h[1];
+    var go = function (t) { setBackTo(tab === 'ajustes' || tab === 'fixos' || tab === 'receitas' ? backTo : tab); setTab(t); };
+    var back = function () { setTab(backTo || 'home'); };
 
     useEffect(function () {
       AsyncStorage.getItem(STORAGE_KEY).then(function (raw) {
@@ -1552,13 +1850,14 @@ function __factory(React, RN, AsyncStorage) {
     }
 
     var screen;
-    if (tab === 'home') screen = <HomeScreen data={data} addTx={addTx} openTx={setTxOpen} goAjustes={function () { setTab('ajustes'); }} goFixos={function () { setTab('fixos'); }} goTab={setTab} />;
-    else if (tab === 'add') screen = <AddScreen data={data} addTx={addTx} />;
+    if (tab === 'home') screen = <HomeScreen data={data} addTx={addTx} openTx={setTxOpen} goAjustes={function () { go('ajustes'); }} goFixos={function () { go('fixos'); }} goReceitas={function () { setMk(currentMk()); go('receitas'); }} goTab={setTab} />;
+    else if (tab === 'add') screen = <AddScreen data={data} addTx={addTx} update={update} toast={toast} />;
+    else if (tab === 'receitas') screen = <ReceitasScreen data={data} mk={mk} setMk={setMk} update={update} toast={toast} addTx={addTx} openTx={setTxOpen} back={back} />;
     else if (tab === 'extrato') screen = <ExtratoScreen data={data} mk={mk} setMk={setMk} openTx={setTxOpen} />;
-    else if (tab === 'analise') screen = <AnaliseScreen data={data} mk={mk} setMk={setMk} />;
+    else if (tab === 'analise') screen = <AnaliseScreen data={data} mk={mk} setMk={setMk} openTx={setTxOpen} goReceitas={function () { go('receitas'); }} />;
     else if (tab === 'metas') screen = <MetasScreen data={data} update={update} toast={toast} />;
-    else if (tab === 'fixos') screen = <FixosScreen data={data} update={update} toast={toast} back={function () { setTab('home'); }} />;
-    else screen = <AjustesScreen data={data} update={update} toast={toast} back={function () { setTab('home'); }} goFixos={function () { setTab('fixos'); }} redoSetup={function () { setRedo(true); }} />;
+    else if (tab === 'fixos') screen = <FixosScreen data={data} update={update} toast={toast} back={back} />;
+    else screen = <AjustesScreen data={data} update={update} toast={toast} back={back} goFixos={function () { setTab('fixos'); }} goReceitas={function () { setMk(currentMk()); setTab('receitas'); }} redoSetup={function () { setRedo(true); }} />;
 
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: C.bg }}>
@@ -1624,7 +1923,7 @@ function __factory(React, RN, AsyncStorage) {
 
   App.VERSION = VERSION;
   App.__test = { budget: budget, analyze: analyze, emptyData: emptyData, normalize: normalize, migrateV1: migrateV1, uid: uid,
-    HomeScreen: HomeScreen, SetupScreen: SetupScreen, FixosScreen: FixosScreen, AddScreen: AddScreen, ExtratoScreen: ExtratoScreen,
+    HomeScreen: HomeScreen, ReceitasScreen: ReceitasScreen, SetupScreen: SetupScreen, FixosScreen: FixosScreen, AddScreen: AddScreen, ExtratoScreen: ExtratoScreen,
     AnaliseScreen: AnaliseScreen, MetasScreen: MetasScreen, AjustesScreen: AjustesScreen, DEFAULT_CARDS: DEFAULT_CARDS };
   return App;
 }
