@@ -1,6 +1,12 @@
 # Meu Dinheiro
 
-App de gestão financeira para iPhone (React Native / Expo), focado em controlar os pequenos gastos ("besteiras"), metas de investimento e reserva de emergência.
+App de controle financeiro para iPhone (React Native, roda no Expo Go via Snack).
 
-Abra no Expo Go pelo Snack:
-https://snack.expo.dev/?sourceUrl=https%3A%2F%2Fraw.githubusercontent.com%2Fz7gtpv4dj5-cmd%2Ffinan-as-%2Fmain%2FApp.js&name=Meu%20Dinheiro&dependencies=%40react-native-async-storage%2Fasync-storage&platform=mydevice
+## Como funciona a atualização
+- `App.js` é só um **carregador**: fica no Snack e nunca mais precisa mudar.
+- Ao abrir, ele baixa `app.bundle.js` deste repositório e roda. Sem internet, usa a última versão salva.
+- Para atualizar o app: editar `src/app.jsx`, rodar `node scripts/build.js` e dar push no `main`.
+
+## Regra do orçamento
+Salário + extras − gastos fixos − mercado − parcelas de compras grandes − investimento/reserva (20%) = **saldo**.
+Saldo ÷ dias do mês = **limite diário** do dia a dia. Gastou mais que o limite, o excesso come os próximos dias.
